@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter_level(log_level)
         .init();
 
-    debug!("Parsed arguments: {:?}", cli);
+    debug!("Parsed arguments: {cli:?}");
 
     let mut headers = HeaderMap::new();
     for header_str in &cli.headers {
@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let value = HeaderValue::from_str(parts[1].trim())?;
             headers.insert(name, value);
         } else {
-            return Err(format!("Invalid header format: {}", header_str).into());
+            return Err(format!("Invalid header format: {header_str}").into());
         }
     }
 
@@ -138,7 +138,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if status.is_success() {
             stdout.write_all(&body_bytes)?;
         } else {
-            error!("Request failed with status: {}", status);
+            error!("Request failed with status: {status}");
             stdout.write_all(&body_bytes)?;
         }
     }

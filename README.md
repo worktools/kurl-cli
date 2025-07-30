@@ -7,7 +7,7 @@
 - GET, POST, HEAD requests
 - Custom headers (`-H`)
 - POST data (`-d`)
-- Include response headers in output (`-i`)
+- Response headers included in output by default
 - Fetch headers only (`-I`)
 - Verbose logging for debugging (`-v`, `-v -v`, `-v -v -v`)
 
@@ -25,16 +25,10 @@ kurl [FLAGS] [OPTIONS] <URL>
 
 ### Examples
 
-**Simple GET request:**
+**Simple GET request (headers are included by default):**
 
 ```bash
 kurl https://httpbin.org/get
-```
-
-**Include response headers:**
-
-```bash
-kurl -i https://httpbin.org/get
 ```
 
 **Fetch headers only (HEAD request):**

@@ -12,10 +12,6 @@ struct Cli {
     #[argh(positional)]
     url: String,
 
-    /// include protocol response headers in the output
-    #[argh(switch, short = 'i')]
-    include: bool,
-
     /// fetch the headers only (HTTP HEAD)
     #[argh(switch, short = 'I')]
     head: bool,
@@ -122,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut stdout = std::io::stdout();
 
-    if (cli.head || cli.include) && !is_trace {
+    if !is_trace {
         writeln!(stdout, "{:?} {}", response.version(), response.status())?;
         for (key, value) in response.headers() {
             writeln!(stdout, "{}: {}", key, value.to_str()?)?;

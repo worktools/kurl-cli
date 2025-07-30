@@ -92,7 +92,7 @@ fn format_reqwest_error(e: &reqwest::Error) -> String {
     let mut msg = String::new();
 
     if e.is_timeout() {
-        msg.push_str(&format!("Connection to {} timed out.\n", url_str));
+        msg.push_str(&format!("Connection to {url_str} timed out.\n"));
         msg.push_str("\nSuggestions:\n");
         msg.push_str("- Check your network connection and proxy settings.\n");
         msg.push_str(
@@ -104,7 +104,7 @@ fn format_reqwest_error(e: &reqwest::Error) -> String {
             );
         }
     } else if e.is_connect() {
-        msg.push_str(&format!("Failed to connect to {}.\n", url_str));
+        msg.push_str(&format!("Failed to connect to {url_str}.\n"));
         msg.push_str("\nSuggestions:\n");
         msg.push_str("- Ensure the domain name is correct and the server is running.\n");
         msg.push_str("- A firewall, proxy, or network restrictions might be blocking the connection.\n");
@@ -112,23 +112,21 @@ fn format_reqwest_error(e: &reqwest::Error) -> String {
             msg.push_str("- The server's SSL certificate appears to be invalid. You can use the -k/--insecure flag to bypass this check (at your own risk).\n");
         }
     } else if e.is_redirect() {
-        msg.push_str(&format!("Too many redirects for {}.\n", url_str));
+        msg.push_str(&format!("Too many redirects for {url_str}.\n"));
         msg.push_str("\nSuggestions:\n");
         msg.push_str("- The server may have a misconfigured redirect loop.\n");
         msg.push_str("- Use `-v -v -v` to trace the redirect path.\n");
     } else if e.is_builder() {
         msg.push_str(&format!(
-            "Internal error: Failed to build the HTTP request for {}.\n",
-            url_str
+            "Internal error: Failed to build the HTTP request for {url_str}.\n"
         ));
-        msg.push_str(&format!("Details: {}", e));
+        msg.push_str(&format!("Details: {e}"));
     } else {
         // Fallback for other error types (body, decode, etc.)
         msg.push_str(&format!(
-            "An error occurred while processing the request to {}.\n",
-            url_str
+            "An error occurred while processing the request to {url_str}.\n"
         ));
-        msg.push_str(&format!("\nDetails: {}", e));
+        msg.push_str(&format!("\nDetails: {e}"));
     }
 
     msg
@@ -272,7 +270,7 @@ fn main() {
         if let Some(reqwest_err) = e.downcast_ref::<reqwest::Error>() {
             eprintln!("kurl: error: {}", format_reqwest_error(reqwest_err));
         } else {
-            eprintln!("kurl: error: {}", e);
+            eprintln!("kurl: error: {e}");
         }
         std::process::exit(1);
     }

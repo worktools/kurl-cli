@@ -1,5 +1,5 @@
 use argh::FromArgs;
-use log::{debug, error, info, LevelFilter};
+use log::{debug, error, info};
 use reqwest::blocking::{Client, RequestBuilder, Response};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::redirect::Policy;
@@ -10,7 +10,7 @@ use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 #[derive(FromArgs, Debug)]
-/// A simple curl clone, written in Rust.
+/// A curl clone with detailed debugging info, written in Rust.
 struct Cli {
     /// the URL to request
     #[argh(positional)]
@@ -52,19 +52,12 @@ struct Cli {
     #[argh(option, short = 'o')]
     output: Option<String>,
 
-    /// increase logging verbosity
+    /// enable verbose output, including request headers, response headers, and network-level logs.
     #[argh(switch, short = 'v')]
-    verbose: u8,
+    verbose: bool,
 }
 
-fn get_log_level(verbose_count: u8) -> LevelFilter {
-    match verbose_count {
-        0 => LevelFilter::Warn,
-        1 => LevelFilter::Info,
-        2 => LevelFilter::Debug,
-        _ => LevelFilter::Trace,
-    }
-}
+
 
 fn print_request(req: &RequestBuilder) {
     if let Some(req_clone) = req.try_clone() {
@@ -134,11 +127,13 @@ fn format_reqwest_error(e: &reqwest::Error) -> String {
 
 fn main() {
     let cli: Cli = argh::from_env();
-    let log_level = get_log_level(cli.verbose);
-
-    env_logger::Builder::new()
-        .filter_level(log_level)
-        .init();
+    let mut builder = env_logger::Builder::new();
+    if cli.verbose {
+        builder.parse_filters("kurl=trace,reqwest=trace,hyper=trace");
+    } else {
+        builder.parse_filters("kurl=warn");
+    }
+    builder.init();
 
     debug!("Parsed arguments: {cli:?}");
 
@@ -158,12 +153,9 @@ fn main() {
         }
 
         let mut client_builder = Client::builder()
+            .user_agent(concat!("kurl/", env!("CARGO_PKG_VERSION")))
             .default_headers(headers.clone())
-            .redirect(if cli.location {
-                Policy::default()
-            } else {
-                Policy::none()
-            })
+            .redirect(Policy::none())
             .danger_accept_invalid_certs(cli.insecure);
 
         for r in &cli.resolve {
@@ -187,79 +179,109 @@ fn main() {
 
         let client = client_builder.build()?;
 
-        let mut method = cli.request.to_uppercase();
-        if cli.head {
-            method = "HEAD".to_string();
-        }
+        let is_trace = cli.verbose;
+        let mut current_url = cli.url.clone();
+        let mut redirect_count = 0;
+        const MAX_REDIRECTS: u8 = 10;
 
-        let request_builder = match method.as_str() {
-            "HEAD" => client.head(&cli.url),
-            "GET" => client.get(&cli.url),
-            "POST" => {
-                let mut req = client.post(&cli.url);
-                if let Some(data) = cli.data.clone() {
-                    if !headers.contains_key("content-type") {
-                        req = req.header("Content-Type", "application/x-www-form-urlencoded");
+        loop {
+            let method = cli.request.to_uppercase();
+
+            // On redirect, follow with a GET request, and don't send the body.
+            let request_builder = if redirect_count > 0 || cli.head {
+                client.get(&current_url)
+            } else {
+                match method.as_str() {
+                    "HEAD" => client.head(&current_url),
+                    "GET" => client.get(&current_url),
+                    "POST" => {
+                        let mut req = client.post(&current_url);
+                        if let Some(data) = cli.data.clone() {
+                            if !headers.contains_key("content-type") {
+                                req = req.header("Content-Type", "application/x-www-form-urlencoded");
+                            }
+                            req = req.body(data);
+                        }
+                        req
                     }
-                    req = req.body(data);
+                    _ => client.request(method.parse()?, &current_url),
                 }
-                req
+            };
+
+            if is_trace {
+                print_request(&request_builder);
             }
-            _ => client.request(method.parse()?, &cli.url),
-        };
 
-        let is_trace = log_level == LevelFilter::Trace;
-
-        if is_trace {
-            print_request(&request_builder);
-        }
-
-        let mut response: Response = request_builder.send()?;
-
-        if is_trace {
-            eprintln!("< {:?} {}", response.version(), response.status());
-            for (key, value) in response.headers() {
-                eprintln!("< {}: {}", key, value.to_str().unwrap_or("[non-ascii]"));
-            }
-            eprintln!("<");
-        }
-
-        let mut header_output: Vec<u8> = Vec::new();
-        if !is_trace {
-            writeln!(
-                header_output,
-                "{:?} {}",
-                response.version(),
-                response.status()
-            )?;
-            for (key, value) in response.headers() {
-                writeln!(header_output, "{}: {}", key, value.to_str()?)?;
-            }
-            writeln!(header_output)?;
-        }
-
-        let mut body_bytes = Vec::new();
-        if !cli.head {
+            let mut response: Response = request_builder.send()?;
             let status = response.status();
-            response.read_to_end(&mut body_bytes)?;
-            if !status.is_success() {
-                error!("Request failed with status: {status}");
+
+            if is_trace {
+                eprintln!("< {:?} {}", response.version(), response.status());
+                for (key, value) in response.headers() {
+                    eprintln!("< {}: {}", key, value.to_str().unwrap_or("[non-ascii]"));
+                }
+                eprintln!("<");
             }
+
+            let mut header_output: Vec<u8> = Vec::new();
+            if !is_trace {
+                writeln!(
+                    header_output,
+                    "{:?} {}",
+                    response.version(),
+                    response.status()
+                )?;
+                for (key, value) in response.headers() {
+                    writeln!(header_output, "{}: {}", key, value.to_str()?)?;
+                }
+                writeln!(header_output)?;
+            }
+
+            let next_url = if status.is_redirection() {
+                response
+                    .headers()
+                    .get(reqwest::header::LOCATION)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|location| response.url().join(location).ok())
+                    .map(|u| u.to_string())
+            } else {
+                None
+            };
+
+            let mut body_bytes = Vec::new();
+            if !cli.head {
+                response.read_to_end(&mut body_bytes)?;
+                if !status.is_success() && !status.is_redirection() {
+                    error!("Request failed with status: {status}");
+                }
+            }
+
+            if let Some(output_file) = &cli.output {
+                let mut file = File::create(output_file)?;
+                std::io::stdout().write_all(&header_output)?;
+                file.write_all(&body_bytes)?;
+                info!("Body written to {output_file}");
+            } else {
+                let mut stdout = std::io::stdout();
+                stdout.write_all(&header_output)?;
+                stdout.write_all(&body_bytes)?;
+                stdout.flush()?;
+            }
+
+            if cli.location && next_url.is_some() {
+                if redirect_count >= MAX_REDIRECTS {
+                    return Err("Too many redirects".into());
+                }
+                redirect_count += 1;
+                current_url = next_url.unwrap();
+                writeln!(std::io::stdout(), "\n----------------------------------------")?;
+                continue;
+            }
+
+            break;
         }
 
-        if let Some(output_file) = cli.output {
-            let mut file = File::create(&output_file)?;
-            std::io::stdout().write_all(&header_output)?;
-            file.write_all(&body_bytes)?;
-            info!("Body written to {output_file}");
-        } else {
-            let mut stdout = std::io::stdout();
-            stdout.write_all(&header_output)?;
-            stdout.write_all(&body_bytes)?;
-            stdout.flush()?;
-        }
-
-        if cli.verbose > 0 {
+        if cli.verbose {
             info!("Request completed in {:?}", start_time.elapsed());
         }
 

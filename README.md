@@ -1,6 +1,6 @@
 # kurl-cli
 
-`kurl` is a command-line tool inspired by `curl`, written in Rust. It aims to be compatible with `curl`'s most common flags while providing enhanced, easy-to-read debugging information.
+`kurl` is a command-line tool inspired by `curl`, written in Rust. It aims to be compatible with `curl`'s most common flags while providing enhanced, easy-to-read debugging information, especially for redirect chains.
 
 ## Features
 
@@ -9,12 +9,12 @@
 - POST data (`-d`)
 - Response headers included in output by default
 - Fetch headers only (`-I`)
-- Follow redirects (`-L`)
+- Follow redirects (`-L`), with each step of the redirect chain clearly separated.
 - Insecure connections (`-k`)
 - Save output to file (`-o`)
 - Manual DNS resolution (`--resolve`)
 - Connection timeout (`--connect-timeout`)
-- Verbose logging for debugging (`-v`, `-v -v`, `-v -v -v`)
+- Verbose logging for deep debugging (`-v`)
 
 ## Installation
 
@@ -42,10 +42,23 @@ kurl https://httpbin.org/get
 kurl -I https://httpbin.org/get
 ```
 
-**Follow a redirect:**
+**Follow a redirect and show the full chain:**
+
+When following redirects with `-L`, `kurl` will print the full response for each request, separated by a clear divider. This is excellent for debugging redirect issues.
 
 ```bash
 kurl -L http://google.com
+```
+```
+HTTP/1.1 301 Moved Permanently
+location: http://www.google.com/
+...
+
+----------------------------------------
+HTTP/1.1 200 OK
+...
+
+<!doctype html>...
 ```
 
 **Save output to a file:**
@@ -73,17 +86,10 @@ kurl -k https://self-signed.badssl.com/
 
 **Verbose output for debugging:**
 
-Use `-v` for info (includes timing), `-v -v` for debug, and `-v -v -v` for trace-level output.
+Use a single `-v` flag to enable the most detailed logging level. This is equivalent to `curl -v` and will show request/response headers and underlying network connection details (TCP, TLS).
 
 ```bash
-# Level 1: Info with timing
-kurl -v https://tiye.me
-
-# Level 2: Debug
-kurl -v -v https://tiye.me
-
-# Level 3: Trace (with > < header details)
-kurl -v -v -v https://tiye.me
+kurl -v -L https://google.com
 ```
 
 ## Design

@@ -21,3 +21,5 @@ builds/
 /profile.json
 
 .DS_Store
+
+test-out.html

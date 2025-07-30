@@ -9,6 +9,11 @@
 - POST data (`-d`)
 - Response headers included in output by default
 - Fetch headers only (`-I`)
+- Follow redirects (`-L`)
+- Insecure connections (`-k`)
+- Save output to file (`-o`)
+- Manual DNS resolution (`--resolve`)
+- Connection timeout (`--connect-timeout`)
 - Verbose logging for debugging (`-v`, `-v -v`, `-v -v -v`)
 
 ## Installation
@@ -37,6 +42,18 @@ kurl https://httpbin.org/get
 kurl -I https://httpbin.org/get
 ```
 
+**Follow a redirect:**
+
+```bash
+kurl -L http://google.com
+```
+
+**Save output to a file:**
+(Headers are printed to the console, body is saved to the file)
+```bash
+kurl -o google.html https://google.com
+```
+
 **POST request with data:**
 
 ```bash
@@ -49,12 +66,17 @@ kurl -X POST -d "name=kurl&lang=rust" https://httpbin.org/post
 kurl -H "X-Custom: Hello" https://httpbin.org/headers
 ```
 
+**Allow insecure connections (e.g., for self-signed certificates):**
+```bash
+kurl -k https://self-signed.badssl.com/
+```
+
 **Verbose output for debugging:**
 
-Use `-v` for info, `-v -v` for debug, and `-v -v -v` for trace-level output, which includes detailed request and response headers similar to `curl -v`.
+Use `-v` for info (includes timing), `-v -v` for debug, and `-v -v -v` for trace-level output.
 
 ```bash
-# Level 1: Info
+# Level 1: Info with timing
 kurl -v https://tiye.me
 
 # Level 2: Debug

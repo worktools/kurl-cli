@@ -6,7 +6,9 @@
 
 - GET, POST, HEAD requests
 - Custom headers (`-H`)
+- Cookies (`-b`, `--cookie`)
 - POST data (`-d`)
+- Raw POST data (`--data-raw`)
 - Response headers included in output by default
 - Fetch headers only (`-I`)
 - Follow redirects (`-L`), with each step of the redirect chain clearly separated.
@@ -69,14 +71,30 @@ kurl -o google.html https://google.com
 
 **POST request with data:**
 
+`kurl` automatically uses the `POST` method when `-d` or `--data-raw` is present.
+
 ```bash
-kurl -X POST -d "name=kurl&lang=rust" https://httpbin.org/post
+kurl -d "name=kurl&lang=rust" https://httpbin.org/post
+```
+
+**POST request with raw JSON data:**
+
+Unlike `-d`, `--data-raw` sends the data exactly as is. No extra processing is done, and no `Content-Type` header is automatically added.
+
+```bash
+kurl --data-raw '{"json": true}' -H "Content-Type: application/json" https://httpbin.org/post
 ```
 
 **Send custom headers:**
 
 ```bash
 kurl -H "X-Custom: Hello" https://httpbin.org/headers
+```
+
+**Send cookies:**
+
+```bash
+kurl -b "name=value; name2=value2" https://httpbin.org/cookies
 ```
 
 **Allow insecure connections (e.g., for self-signed certificates):**

@@ -28,9 +28,17 @@ struct Cli {
     #[argh(option, short = 'd')]
     data: Option<String>,
 
+    /// raw data to send in a POST request, without processing
+    #[argh(option)]
+    data_raw: Option<String>,
+
     /// custom header(s) to pass to the server
     #[argh(option, short = 'H')]
     headers: Vec<String>,
+
+    /// cookie(s) to pass to the server, e.g. "name=value; name2=value2"
+    #[argh(option, short = 'b', long = "cookie")]
+    cookie: Option<String>,
 
     /// follow redirects
     #[argh(switch, short = 'L')]
@@ -152,6 +160,13 @@ fn main() {
             }
         }
 
+        if let Some(cookie_str) = &cli.cookie {
+            headers.insert(
+                reqwest::header::COOKIE,
+                HeaderValue::from_str(cookie_str)?,
+            );
+        }
+
         let mut client_builder = Client::builder()
             .user_agent(concat!("kurl/", env!("CARGO_PKG_VERSION")))
             .default_headers(headers.clone())
@@ -179,33 +194,47 @@ fn main() {
 
         let client = client_builder.build()?;
 
+        let initial_method = if cli.head {
+            "HEAD".to_string()
+        } else if (cli.data.is_some() || cli.data_raw.is_some()) && cli.request.to_uppercase() == "GET"
+        {
+            "POST".to_string()
+        } else {
+            cli.request.to_uppercase()
+        };
+
         let is_trace = cli.verbose;
         let mut current_url = cli.url.clone();
         let mut redirect_count = 0;
         const MAX_REDIRECTS: u8 = 10;
 
         loop {
-            let method = cli.request.to_uppercase();
+            if cli.data.is_some() && cli.data_raw.is_some() {
+                return Err("Cannot use both --data and --data-raw at the same time".into());
+            }
 
-            // On redirect, follow with a GET request, and don't send the body.
-            let request_builder = if redirect_count > 0 || cli.head {
-                client.get(&current_url)
+            let method = if redirect_count > 0 {
+                "GET"
             } else {
-                match method.as_str() {
-                    "HEAD" => client.head(&current_url),
-                    "GET" => client.get(&current_url),
-                    "POST" => {
-                        let mut req = client.post(&current_url);
-                        if let Some(data) = cli.data.clone() {
-                            if !headers.contains_key("content-type") {
-                                req = req.header("Content-Type", "application/x-www-form-urlencoded");
-                            }
-                            req = req.body(data);
+                &initial_method
+            };
+
+            let request_builder = match method {
+                "HEAD" => client.head(&current_url),
+                "GET" => client.get(&current_url),
+                "POST" => {
+                    let mut req = client.post(&current_url);
+                    if let Some(data) = cli.data.clone() {
+                        if !headers.contains_key("content-type") {
+                            req = req.header("Content-Type", "application/x-www-form-urlencoded");
                         }
-                        req
+                        req = req.body(data);
+                    } else if let Some(data) = cli.data_raw.clone() {
+                        req = req.body(data);
                     }
-                    _ => client.request(method.parse()?, &current_url),
+                    req
                 }
+                other => client.request(other.parse()?, &current_url),
             };
 
             if is_trace {

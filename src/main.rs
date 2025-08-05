@@ -21,7 +21,7 @@ struct Cli {
     head: bool,
 
     /// the HTTP method to use
-    #[argh(option, short = 'X', default = "\"GET\".to_string()") ]
+    #[argh(option, short = 'X', default = "\"GET\".to_string()")]
     request: String,
 
     /// the data to send in a POST request
@@ -65,8 +65,6 @@ struct Cli {
     verbose: bool,
 }
 
-
-
 fn print_request(req: &RequestBuilder) {
     if let Some(req_clone) = req.try_clone() {
         if let Ok(built_req) = req_clone.build() {
@@ -83,6 +81,16 @@ fn print_request(req: &RequestBuilder) {
             eprintln!(">");
         }
     }
+}
+
+fn normalize_url(url: &str) -> String {
+    // check if the URL already has a protocol
+    if url.starts_with("http://") || url.starts_with("https://") {
+        return url.to_string();
+    }
+
+    // otherwise, prepend http://
+    format!("http://{}", url)
 }
 
 fn format_reqwest_error(e: &reqwest::Error) -> String {
@@ -108,7 +116,9 @@ fn format_reqwest_error(e: &reqwest::Error) -> String {
         msg.push_str(&format!("Failed to connect to {url_str}.\n"));
         msg.push_str("\nSuggestions:\n");
         msg.push_str("- Ensure the domain name is correct and the server is running.\n");
-        msg.push_str("- A firewall, proxy, or network restrictions might be blocking the connection.\n");
+        msg.push_str(
+            "- A firewall, proxy, or network restrictions might be blocking the connection.\n",
+        );
         if e.to_string().contains("certificate") {
             msg.push_str("- The server's SSL certificate appears to be invalid. You can use the -k/--insecure flag to bypass this check (at your own risk).\n");
         }
@@ -161,10 +171,7 @@ fn main() {
         }
 
         if let Some(cookie_str) = &cli.cookie {
-            headers.insert(
-                reqwest::header::COOKIE,
-                HeaderValue::from_str(cookie_str)?,
-            );
+            headers.insert(reqwest::header::COOKIE, HeaderValue::from_str(cookie_str)?);
         }
 
         let mut client_builder = Client::builder()
@@ -196,7 +203,8 @@ fn main() {
 
         let initial_method = if cli.head {
             "HEAD".to_string()
-        } else if (cli.data.is_some() || cli.data_raw.is_some()) && cli.request.to_uppercase() == "GET"
+        } else if (cli.data.is_some() || cli.data_raw.is_some())
+            && cli.request.to_uppercase() == "GET"
         {
             "POST".to_string()
         } else {
@@ -204,7 +212,7 @@ fn main() {
         };
 
         let is_trace = cli.verbose;
-        let mut current_url = cli.url.clone();
+        let mut current_url = normalize_url(&cli.url);
         let mut redirect_count = 0;
         const MAX_REDIRECTS: u8 = 10;
 
@@ -303,7 +311,10 @@ fn main() {
                 }
                 redirect_count += 1;
                 current_url = next_url.unwrap();
-                writeln!(std::io::stdout(), "\n----------------------------------------")?;
+                writeln!(
+                    std::io::stdout(),
+                    "\n----------------------------------------"
+                )?;
                 continue;
             }
 
@@ -326,4 +337,3 @@ fn main() {
         std::process::exit(1);
     }
 }
-

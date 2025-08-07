@@ -90,7 +90,7 @@ fn normalize_url(url: &str) -> String {
     }
 
     // otherwise, prepend http://
-    format!("http://{}", url)
+    format!("http://{url}")
 }
 
 fn format_reqwest_error(e: &reqwest::Error) -> String {
